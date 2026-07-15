@@ -1,3 +1,4 @@
+let gameState = "MAIN_MENU"
 let angleX = 0
 let angleY = 0
 let cameraX = 0
@@ -11,10 +12,9 @@ let isGrounded = false
 let menuOpen = false
 let menuIndex = 0
 let options = [
-    "Toggle Projection",
+    "Restart Game",
     "Exit Menu"
 ]
-let isOrthographic = false
 
 interface Point3D {
     x: number
@@ -32,16 +32,28 @@ let blocks: Block3D[] = []
 let worldSize = 4
 let spacing = 14
 
-for (let x = -worldSize; x <= worldSize; x++) {
-    for (let z = -worldSize; z <= worldSize; z++) {
-        let height = Math.round(Math.sin(x * 0.8) * 1.5 + Math.cos(z * 0.8) * 1.5)
-        blocks.push({
-            cx: x * spacing,
-            cy: -height * 10,
-            cz: z * spacing
-        })
+function resetWorld() {
+    blocks = []
+    for (let x = -worldSize; x <= worldSize; x++) {
+        for (let z = -worldSize; z <= worldSize; z++) {
+            let height = Math.round(Math.sin(x * 0.8) * 1.5 + Math.cos(z * 0.8) * 1.5)
+            blocks.push({
+                cx: x * spacing,
+                cy: -height * 10,
+                cz: z * spacing
+            })
+        }
     }
+    cameraX = 0
+    cameraY = -35
+    cameraZ = -30
+    angleX = 0
+    angleY = 0
+    velocityY = 0
+    isGrounded = false
 }
+
+resetWorld()
 
 let localVertices: Point3D[] = [
     { x: -5, y: -5, z: -5 },
@@ -61,36 +73,71 @@ let edges = [
 ]
 
 function project(p: Point3D): { x: number, y: number } {
-    if (isOrthographic) {
-        return {
-            x: Math.round(p.x + 80),
-            y: Math.round(p.y + 60)
-        }
-    } else {
-        let z = p.z
-        if (z <= 1) z = 1
-        let screenX = (p.x * fov) / z + 80
-        let screenY = (p.y * fov) / z + 60
-        return {
-            x: Math.round(screenX),
-            y: Math.round(screenY)
-        }
+    let z = p.z
+    if (z <= 1) z = 1
+    let screenX = (p.x * fov) / z + 80
+    let screenY = (p.y * fov) / z + 60
+    return {
+        x: Math.round(screenX),
+        y: Math.round(screenY)
     }
 }
 
 controller.A.onEvent(ControllerButtonEvent.Pressed, function () {
-    if (!menuOpen) {
-        menuOpen = true
-        menuIndex = 0
-    } else {
+    if (gameState == "MAIN_MENU") {
+        gameState = "GAME"
+    } else if (menuOpen) {
         if (menuIndex == 0) {
-            isOrthographic = !isOrthographic
+            resetWorld()
         }
         menuOpen = false
+    } else if (controller.B.isPressed()) {
+        if (Math.randomRange(1, 100) <= 10) {
+            control.panic(42)
+        } else {
+            let radY = (angleY * Math.PI) / 180
+            let placeX = cameraX + Math.sin(radY) * 25
+            let placeZ = cameraZ + Math.cos(radY) * 25
+            let gridX = Math.round(placeX / spacing) * spacing
+            let gridZ = Math.round(placeZ / spacing) * spacing
+
+            let foundGroundY = 0
+            for (let b = 0; b < blocks.length; b++) {
+                if (blocks[b].cx == gridX && blocks[b].cz == gridZ) {
+                    if (blocks[b].cy < foundGroundY) {
+                        foundGroundY = blocks[b].cy
+                    }
+                }
+            }
+
+            blocks.push({
+                cx: gridX,
+                cy: foundGroundY - spacing,
+                cz: gridZ
+            })
+        }
+    }
+})
+
+controller.A.onEvent(ControllerButtonEvent.Released, function () {
+    if (gameState == "GAME" && !menuOpen && !controller.B.isPressed() && isGrounded) {
+        velocityY = -5.5
+        isGrounded = false
+    }
+})
+
+controller.menu.onEvent(ControllerButtonEvent.Pressed, function () {
+    if (gameState == "GAME") {
+        menuOpen = !menuOpen
+        menuIndex = 0
     }
 })
 
 game.onUpdate(function () {
+    if (gameState == "MAIN_MENU") {
+        return
+    }
+
     if (menuOpen) {
         if (controller.up.isPressed()) {
             menuIndex = (menuIndex - 1 + options.length) % options.length
@@ -155,6 +202,14 @@ game.onUpdate(function () {
 })
 
 game.onPaint(function () {
+    screen.fill(0)
+
+    if (gameState == "MAIN_MENU") {
+        screen.print("MINECRAFT WIREFRAME", 25, 45, 9)
+        screen.print("Press Space/A to Start", 20, 70, 1)
+        return
+    }
+
     if (menuOpen) {
         screen.fillRect(10, 10, 140, 100, 15)
         screen.drawRect(10, 10, 140, 100, 1)
@@ -164,8 +219,6 @@ game.onPaint(function () {
             screen.print(prefix + options[i], 15, 15 + (i * 12), color)
         }
     } else {
-        screen.print("A: Menu", 2, 2, 1)
-
         let radY = (-angleY * Math.PI) / 180
         let cosY = Math.cos(radY)
         let sinY = Math.sin(radY)
