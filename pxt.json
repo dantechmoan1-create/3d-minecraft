@@ -1,7 +1,7 @@
 {
     "name": "3D minecraft",
     "version": "1.0.0",
-    "description": "",
+    "description": "3D minecraft wireframe! ITS REAL",
     "dependencies": {
         "device": "*"
     },
